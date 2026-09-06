@@ -1,6 +1,6 @@
-# CodeViz —— 可交互的 C++ 代码可视化工具
+# CodeViz — Interactive C++ Code Visualization
 
-> 把代码库变成一张**可点击、可拖拽、可探索的图**：每个类是一块真实代码，每个符号都是跳转入口。基于 **libclang 真实语义索引**，不需要 LLM。
+> Turn a codebase into a **clickable, draggable, explorable graph**: every class is a block of real source code, every symbol is a jump target. Powered by **libclang semantic indexing** — no LLM required.
 
 ![screenshot](docs/images/screenshot-main.jpg)
 
@@ -9,121 +9,124 @@
 [![libclang](https://img.shields.io/badge/libclang-18-7C3AED.svg)](https://clang.llvm.org)
 [![G6](https://img.shields.io/badge/AntV%20G6-5.1-873BF4.svg)](https://g6.antv.antgroup.com)
 
-## ✨ 特性
+## ✨ Features
 
-- **代码块即节点**：每个类/函数是一块真实源代码（声明+实现），不是圆圈或抽象框
-- **真实语义索引**：libclang 解析，配合 `compile_commands.json` 精度拉满；没有也能用（降级模式）
-- **五种符号一键跳转**：类名、函数、成员变量、全局变量、局部变量/参数——点击即在鼠标处弹出定义框
-- **引用线从词出发**：箭头精确从你点击的那个单词连到目标（同名多次出现也分得清）
-- **规则分类器（零 LLM）**：语法信号 + 命名约定 + 图论特征三路打分，自动识别七种类角色（流程/接口/实现/工具/管理/数据结构/桥接），置信度低标虚线
-- **主干+卫星心智**：从 `main` 入口逐级展开，函数实现按需弹出
-- **文件树**：右侧完整文件列表（头文件/实现/其他图标区分），点击看全文
-- **丝滑交互**：拖动重排、点击置顶、滚轮全局缩放（框内也生效）、连带关闭
-- **双击即用的桌面版**：PyInstaller 打包，用户机器零依赖（Windows 10/11）
+- **Code blocks as nodes**: each class/function is a block of real source (declaration + implementation), not an abstract bubble
+- **True semantic indexing**: libclang-based, with `compile_commands.json` support for full precision (works without it in degraded mode)
+- **One-click jumps for 5 symbol kinds**: class names, functions, member variables, globals, and locals/parameters — click to pop a definition box at your cursor
+- **Reference lines from the exact token**: arrows start from the precise word you clicked (distinguishes repeated occurrences)
+- **Rule-based classifier (zero LLM)**: syntax signals + naming conventions + graph metrics score 7 class roles (flow/interface/impl/utility/manager/data/bridge); low confidence gets a dashed border
+- **Main-flow exploration**: expand from the `main` entry, pull up function implementations on demand
+- **File tree**: full file list with type icons, click for full content
+- **Smooth interactions**: drag to rearrange, click to raise, global wheel zoom (works inside blocks), cascading close
+- **Double-click desktop app**: PyInstaller-bundled, zero dependencies for end users (Windows 10/11)
 
-## 📸 截图
+## 📸 Screenshots
 
-| 主界面 | 符号跳转 |
+| Main view | Symbol jumps |
 |---|---|
-| ![主界面](docs/images/screenshot-main.jpg) | ![符号跳转](docs/images/screenshot-jump.jpg) |
+| ![main](docs/images/screenshot-main.jpg) | ![jumps](docs/images/screenshot-jump.jpg) |
 
-## 🏗 架构
+## 🏗 Architecture
 
 ```mermaid
 flowchart LR
-    subgraph 前端["前端 Svelte 5 + AntV G6"]
-        UI[界面层<br/>方块渲染/拖拽/缩放]
-        CLS[规则分类器<br/>七种角色]
-        LOAD[索引装载器]
+    subgraph FE["Frontend: Svelte 5 + AntV G6"]
+        UI[UI layer<br/>blocks / drag / zoom]
+        CLS[Rule classifier<br/>7 roles]
+        LOAD[Index loader]
     end
-    subgraph 索引["索引层 libclang"]
-        IDX[索引器 index.exe<br/>符号表+调用边+文件内容]
+    subgraph IDX["Index layer: libclang"]
+        EXE[index.exe<br/>symbols + call edges + file contents]
     end
     UI --> CLS
     LOAD --> UI
-    LOAD -- index.json --> IDX
-    IDX -- compile_commands.json --> 项目源码
+    LOAD -- index.json --> EXE
+    EXE -- compile_commands.json --> SRC[Project source]
 ```
 
-**数据流**：`index.exe <项目目录>` → `index.json`（含全部文件内容+符号表+调用边）→ 网页"导入索引" → 图渲染。前后端通过一个 JSON 文件解耦，索引器可独立升级（换 clangd 也只需换它）。
+**Data flow**: `index.exe <project-dir>` → `index.json` (all file contents + symbol table + call edges) → click **Open Project** in the UI → graph renders. Frontend and indexer are decoupled by a single JSON file — swapping the indexer (e.g., to clangd) touches nothing else.
 
-## 🛠 技术栈
+## 🛠 Tech Stack
 
-| 层 | 选型 | 说明 |
+| Layer | Choice | Why |
 |---|---|---|
-| 前端框架 | Svelte 5 + Vite 6 | 编译时框架，图交互零运行时开销 |
-| 图渲染 | AntV G6 5.1 | HTML 节点 + SVG 覆盖层箭头 |
-| 代码解析 | libclang 18（Python 绑定） | 编译器级语义：重载/继承/调用关系 |
-| 分类 | 纯规则打分 | 语法+命名+图论，无 LLM |
-| 桌面打包 | PyInstaller | 启动器 + 索引器双 exe |
+| Frontend | Svelte 5 + Vite 6 | Compile-time framework, zero runtime overhead for graph interaction |
+| Graph | AntV G6 5.1 | HTML nodes + SVG overlay arrows |
+| Parsing | libclang 18 (Python bindings) | Compiler-grade semantics: overloads, inheritance, call graphs |
+| Classification | Pure rule scoring | Syntax + naming + graph metrics, no LLM |
+| Packaging | PyInstaller | Launcher + indexer, two exes |
 
-## 🚀 快速开始
+## 🚀 Quick Start
 
-### 开发模式
+### Development
 
 ```bash
 npm install
-npm run dev        # http://localhost:5173（内置 camera 项目样例索引）
+npm run dev        # http://localhost:5173 (ships with a sample index of a camera project)
 ```
 
-### 桌面版
+### Desktop
 
-从 Release 下载 `CodeViz.zip`（约 45MB），解压双击 `CodeViz.exe`——浏览器自动打开界面，无需安装任何环境。
+Download `CodeViz.zip` from Releases (~45 MB), unzip, double-click `CodeViz.exe` — the browser opens automatically. No environment required.
 
-### 看自己的项目
+### Visualize your own project
+
+Type the project path in the top bar (copy it from Explorer's address bar) and hit **Open Project** — indexing runs locally. Or, CLI-style:
 
 ```bash
-index.exe <项目目录> index.json
-# 网页点【导入索引】选择 index.json
+index.exe <project-dir> index.json
 ```
 
-## 🎮 操作指南
+then **Import Index** in the UI.
 
-| 操作 | 效果 |
+## 🎮 Interactions
+
+| Action | Effect |
 |---|---|
-| 点击彩色类名 | 打开类方块（头文件视图，.h/.cpp 可切） |
-| 点击函数名 | 弹出该函数的实现框 |
-| 点击成员/全局/局部变量 | 弹出声明框（青/琥珀/靛蓝三色） |
-| 拖拽方块 | 重新摆放（位置记忆） |
-| 点击方块 | 置顶；点 ✕ 关闭（连带关子框） |
-| 滚轮 | 全局缩放（以鼠标为中心，框内同样生效） |
-| 右侧文件树 | 点文件看全文 |
+| Click colored class name | Open class block (header view, .h/.cpp toggle) |
+| Click function name | Pop up that function's implementation |
+| Click member / global / local var | Pop up its declaration (teal / amber / indigo) |
+| Drag a block | Rearrange (position remembered) |
+| Click a block | Raise to top; ✕ closes (cascades to children) |
+| Mouse wheel | Global zoom centered on cursor (works inside blocks) |
+| File tree (right) | Click a file for full content |
 
-## 📁 目录结构
+## 📁 Project Layout
 
 ```
 codeviz/
 ├── src/
-│   ├── App.svelte          # 主界面（图+交互+SVG 箭头）
-│   ├── FileTree.svelte     # 文件树组件
-│   ├── loader.js           # index.json → 图数据
-│   └── classifier.js       # 规则分类器
+│   ├── App.svelte          # Main UI (graph + interactions + SVG arrows)
+│   ├── FileTree.svelte     # File tree component
+│   ├── loader.js           # index.json → graph data
+│   └── classifier.js       # Rule-based role classifier
 ├── tools/
-│   ├── index.py            # libclang 索引器
-│   └── serve.py            # 桌面版本地服务
-├── public/camera-index.json # 内置样例（camera 项目）
-└── docs/images/            # 截图
+│   ├── index.py            # libclang indexer
+│   └── serve.py            # Desktop local server (also proxies indexing)
+├── public/camera-index.json  # Built-in sample index
+└── docs/images/            # Screenshots
 ```
 
-## 🧠 设计手记（踩坑实录）
+## 🧠 War Stories (bugs worth sharing)
 
-- **G6 5.1 相机 API 返回 NaN**：`getViewportCenter()` 等坐标 API 返回 NaN，坐标转换改用"读画布层 CSS transform 矩阵逆变换"绕过——浏览器渲染什么矩阵就是什么，不可能错
-- **空成员污染**：`Q_OBJECT` 宏展开产生匿名字段，空字符串进了正则交替式，在每个字符间插入空 span，整段 HTML 被污染（函数全部失去可点击性）
-- **header-only 库混入索引**：fmt（vendor 在 third_party）的函数被误收为项目符号，`in` 匹配了 `init` 子串——词边界 + 定义位置过滤双修复
-- **坐标系的教训**：屏幕坐标、视口坐标、画布坐标三套体系混用是可视化工具最大的坑，所有转换集中在一个函数里
+- **G6 5.1 camera API returns NaN**: `getViewportCenter()` and friends return NaN — coordinate conversion was rewritten to invert the canvas layer's CSS transform matrix instead. What the browser renders is what the matrix says; it cannot lie.
+- **Empty member pollution**: `Q_OBJECT` macro expansion yields anonymous fields; an empty string slipped into a regex alternation, inserting empty spans between every character and silently destroying clickability across the whole block.
+- **Header-only library leakage**: functions from vendored fmt ended up in the symbol table; `in` matched the substring of `init`. Fixed with word boundaries + definition-location filtering.
+- **Coordinate-space hell**: screen/viewport/canvas — three coordinate systems mixing is the #1 trap in visualization tools; all conversions now live in one function.
 
-## ⚠️ 已知限制
+## ⚠️ Known Limitations
 
-- 宏使用处暂不可点（定义处可点），tree-sitter/clangd 阶段细化
-- 无 compile_commands 的项目调用边可能不全（符号提取不受影响）
-- 桌面版启动带控制台窗口（Tauri 壳规划中）
+- Macro usage sites not yet clickable (definition sites are) — planned for the clangd-based indexer stage
+- Without `compile_commands.json`, call edges may be incomplete (symbol extraction is unaffected)
+- Desktop launcher shows a console window (Tauri shell planned)
 
-## 🗺 路线图
+## 🗺 Roadmap
 
-- [ ] Tauri 原生壳（去黑窗、真单 exe）
-- [ ] 宏使用处跳转（clangd 语义索引）
-- [ ] 搜索/过滤、小地图
-- [ ] 多语言支持（tree-sitter 扩展）
+- [ ] Tauri native shell (no console window, true single exe)
+- [ ] Macro call-site jumps (clangd semantic index)
+- [ ] Search / filtering, minimap
+- [ ] Multi-language support via tree-sitter
 
 ## 📄 License
 
