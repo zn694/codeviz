@@ -27,6 +27,7 @@
   let menu = null;
   let lastKey = '';
   let fileTree = [];
+  let dbg = '';   // 调试读数（临时）
 
   // ---- 文件树 ----
   function buildTree(paths) {
@@ -402,10 +403,10 @@
   }
 
   function placeNear(from, target, token) {
-    if (expanded.has(target) || !graph) return;
+    if (!graph) return;
     const src = manualPos[from] || graph.getNodeData(from)?.style || null;
     const tw = blockSize(target).width, th = blockSize(target).height;
-    // 新框出现在鼠标（点击词）位置：以光标为中心
+    // 框出现在鼠标（点击词）位置：以光标为中心（已打开的框也移过来）
     if (token && token.x != null) {
       manualPos[target] = { x: token.x - tw / 2, y: token.y - th / 2 };
       return;
@@ -514,10 +515,30 @@
     return 0;
   }
 
-  // 取点击词的中心——浏览器客户端坐标直接转画布坐标（getCanvasByClient 最可靠）
+  // 取点击词的中心——从 G6 画布层的 CSS transform 矩阵反推
+  // （G6 5.1 的相机 API getViewportCenter 返回 NaN，不可用）
+  function clientToCanvas(cx, cy) {
+    const cr = container.getBoundingClientRect();
+    // 找第一个带 transform 的层（G6 的 canvas 包装层，translate+scale）
+    let m = null;
+    for (const el of container.querySelectorAll('div, canvas')) {
+      const t = getComputedStyle(el).transform;
+      if (t && t !== 'none') { m = new DOMMatrixReadOnly(t); break; }
+    }
+    const tx = m ? m.e : 0, ty = m ? m.f : 0, s = m ? m.a : 1;
+    return {
+      x: (cx - cr.left - tx) / s,
+      y: (cy - cr.top - ty) / s,
+    };
+  }
   function tokenCenter(el) {
     const r = el.getBoundingClientRect();
-    return graph.getCanvasByClient({ x: r.left + r.width / 2, y: r.top + r.height / 2 });
+    const p = clientToCanvas(r.left + r.width / 2, r.top + r.height / 2);
+    const cr = container.getBoundingClientRect();
+    dbg = `click(${Math.round(r.left + r.width / 2 - cr.left)},${Math.round(r.top + r.height / 2 - cr.top)})`
+      + ` → canvas(${Math.round(p.x)},${Math.round(p.y)})`
+      + ` zoom=${graph.getZoom().toFixed(2)}`;
+    return p;
   }
 
   function openTarget(from, target, token, edgeMeta) {
