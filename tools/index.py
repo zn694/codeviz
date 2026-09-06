@@ -153,11 +153,13 @@ def main(root, out_path):
                     if ch.kind == ci.CursorKind.CXX_BASE_SPECIFIER:
                         b = ch.type.spelling
                         entry['base'] = b.split('::')[-1].split('<')[0]
-                    elif ch.kind == ci.CursorKind.FIELD_DECL:
-                        entry['members'].append({'name': ch.spelling,
-                                                 'line': loc(ch)[1],
-                                                 'endLine': loc(ch)[2],
-                                                 'file': os.path.relpath(fname, root).replace('\\', '/')})
+                    elif ch.kind == ci.CursorKind.FIELD_DECL and ch.spelling:
+                        # 跳过匿名字段（Q_OBJECT 宏展开会产空名 FIELD_DECL）
+                        if not any(m['name'] == ch.spelling for m in entry['members']):
+                            entry['members'].append({'name': ch.spelling,
+                                                     'line': loc(ch)[1],
+                                                     'endLine': loc(ch)[2],
+                                                     'file': os.path.relpath(fname, root).replace('\\', '/')})
                 continue
 
             # 方法定义（.cpp 里）：挂回所属类 + 扫描调用

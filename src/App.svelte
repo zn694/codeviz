@@ -226,11 +226,14 @@
       const c = ROLES[roleOf[owners[0]]?.role]?.color || '#6B7280';
       return `<span class="tok" style="color:${c}" data-targets="${owners.join(',')}" data-from="${id}">${m}</span>`;
     });
-    // ② 类头文件视图：成员变量 → 弹出明细框
+    // ② 类头文件视图：成员变量 → 弹出明细框（空名防御：空交替会污染整个 HTML）
     if (id.startsWith('cls:') && mode === 'h' && n.memberData?.length) {
-      const memPattern = new RegExp(`\\b(${n.memberData.map((x) => escRe(x.name)).join('|')})\\b`, 'g');
-      html = html.replace(memPattern, (m) =>
-        `<span class="mem" data-member="${id}" data-member-name="${m}">${m}</span>`);
+      const memNames = [...new Set(n.memberData.map((x) => x.name).filter(Boolean))];
+      if (memNames.length) {
+        const memPattern = new RegExp(`\\b(${memNames.map(escRe).join('|')})\\b`, 'g');
+        html = html.replace(memPattern, (m) =>
+          `<span class="mem" data-member="${id}" data-member-name="${m}">${m}</span>`);
+      }
     }
     // ③ 全局/文件级变量 → 点击弹声明框
     html = html.replace(varPattern, (m) =>
@@ -279,9 +282,9 @@
     </div>`;
   }
 
-  const CHAR_W = 6.6;
+  const CHAR_W = 6.05;   // Consolas 11px 实际字符宽（0.55em）——估宽不准会被迫折行
   const sizeCache = {};
-  // 行宽单位：全角字符（中文等）占 2 单位——只按字符数估算会把中文方块算矮、内容被裁
+  // 行宽单位：全角字符（中文等）占 2 单位
   const lineUnits = (l) => {
     let u = 0;
     for (const ch of l) u += ch.charCodeAt(0) > 0x2E80 ? 2 : 1;
@@ -295,7 +298,8 @@
     const text = (viewMode[id] || 'h') === 'h' ? n.header : (n.impl || n.header);
     const lines = text.split('\n');
     const maxUnits = Math.max(...lines.map(lineUnits));
-    const width = Math.min(900, Math.max(280, maxUnits * CHAR_W + 48));
+    // 宽度完全按最长行（不设上限，避免被迫折行）；仅保最小值
+    const width = Math.max(280, maxUnits * CHAR_W + 48);
     const unitsPerLine = Math.max(24, Math.floor((width - 24) / CHAR_W));
     let totalLines = 0;
     for (const l of lines) totalLines += Math.max(1, Math.ceil(lineUnits(l) / unitsPerLine));
@@ -364,6 +368,32 @@
     if (!graph) return;
     graph.setData(visibleData());
     graph.render();
+    // 下一帧再校准：G6 的 HTML 节点 DOM 插入有延迟，立即查会扑空
+    requestAnimationFrame(calibrateSizes);
+  }
+
+  // 渲染后实测修正：估算公式有误差时，按真实内容高度修正一次再重渲（防内容被裁）
+  function calibrateSizes() {
+    let changed = false;
+    for (const id of expanded) {
+      const key = `${id}:${viewMode[id] || 'h'}`;
+      const cb = container.querySelector(`[data-node-id="${id}"]`);
+      const pre = cb?.querySelector('.cb-c');
+      if (!cb || !pre) continue;
+      const cur = sizeCache[key];
+      if (!cur) continue;
+      const titleH = cb.querySelector('.cb-t')?.offsetHeight || 30;
+      const need = pre.scrollHeight + titleH + 6;
+      if (need > cur.height + 4) {
+        sizeCache[key] = { width: cur.width, height: Math.ceil(need) };
+        changed = true;
+      }
+    }
+    if (changed) {
+      graph.setData(visibleData());
+      graph.render();
+      requestAnimationFrame(calibrateSizes);  // 修正后再校一遍（防仍偏小）
+    }
   }
 
   // ---- 放置：从"点击的词"出发——取该词到来源框的最近边框点，沿外法线贴边放 ----
@@ -374,28 +404,16 @@
   function placeNear(from, target, token) {
     if (expanded.has(target) || !graph) return;
     const src = manualPos[from] || graph.getNodeData(from)?.style || null;
-    if (!src || src.x == null) return;
-    const sw = blockSize(from).width, sh = blockSize(from).height;
     const tw = blockSize(target).width, th = blockSize(target).height;
-    const S = { x: src.x, y: src.y, w: sw, h: sh };
-    // 垂直对齐点击的词；无 token 时对齐来源框中心
-    const ty = token && token.y != null ? token.y : S.y + S.h / 2;
-    const y = Math.max(60, Math.min(ty - th / 2, 4000));
-    // 候选：右侧优先 / 左侧备选（避开重叠，也不盖住点击处）
-    const GAP = 60;
-    const right = { x: S.x + S.w + GAP, y };
-    const left = { x: S.x - tw - GAP, y };
-    const existing = [...expanded].filter((x) => x !== target && x !== from)
-      .map((x) => {
-        const p = manualPos[x] || graph.getNodeData(x)?.style || null;
-        if (!p || p.x == null) return null;
-        const s = blockSize(x);
-        return { x: p.x, y: p.y, w: s.width, h: s.height };
-      }).filter(Boolean);
-    const overlap = (c) => existing.some((e) => rectsOverlap(e, { x: c.x, y: c.y, w: tw, h: th }));
-    if (!overlap(right)) { manualPos[target] = right; return; }
-    if (!overlap(left)) { manualPos[target] = left; return; }
-    manualPos[target] = right;  // 都重叠则用右侧（允许重叠，点击置顶）
+    // 新框出现在鼠标（点击词）位置：以光标为中心
+    if (token && token.x != null) {
+      manualPos[target] = { x: token.x - tw / 2, y: token.y - th / 2 };
+      return;
+    }
+    // 无 token（候选菜单等）：放在来源框旁边
+    if (src && src.x != null) {
+      manualPos[target] = { x: src.x + blockSize(from).width + 60, y: src.y };
+    }
   }
 
   // ---- SVG 箭头 ----
@@ -496,12 +514,10 @@
     return 0;
   }
 
-  // 取点击词的中心——屏幕坐标 → 画布坐标（placeNear 与方块位置同坐标系）
+  // 取点击词的中心——浏览器客户端坐标直接转画布坐标（getCanvasByClient 最可靠）
   function tokenCenter(el) {
-    const c = container.getBoundingClientRect();
     const r = el.getBoundingClientRect();
-    const vp = { x: r.left - c.left + r.width / 2, y: r.top - c.top + r.height / 2 };
-    return graph.getCanvasByViewport(vp);
+    return graph.getCanvasByClient({ x: r.left + r.width / 2, y: r.top + r.height / 2 });
   }
 
   function openTarget(from, target, token, edgeMeta) {
@@ -589,12 +605,14 @@
       }
     });
 
-    // 滚轮全局缩放：捕获阶段接管（HTML 方块内滚轮同样生效），
-    // 缩放中心 = 鼠标位置（视口坐标），朝光标放大缩小
-    container.addEventListener('wheel', (e) => {
+    // 滚轮全局缩放：window 级捕获（G6 内部可能拦截容器级事件），
+    // 鼠标在画布区域内（含方块上）就缩放；缩放中心 = 鼠标位置（视口坐标）
+    window.addEventListener('wheel', (e) => {
+      const c = container.getBoundingClientRect();
+      if (e.clientX < c.left || e.clientX > c.right || e.clientY < c.top || e.clientY > c.bottom)
+        return;
       e.preventDefault();
       const ratio = e.deltaY > 0 ? 1 / 1.15 : 1.15;
-      const c = container.getBoundingClientRect();
       graph.zoomBy(ratio, undefined, { x: e.clientX - c.left, y: e.clientY - c.top });
     }, { passive: false, capture: true });
 
@@ -893,16 +911,24 @@
   }
   :global(.cb.scrollable .cb-c::-webkit-scrollbar) { width: 6px; }
   :global(.cb.scrollable .cb-c::-webkit-scrollbar-thumb) { background: #C9C2B4; border-radius: 3px; }
-  :global(.tok) { cursor: pointer; text-decoration: underline dotted; }
+  /* 可点符号加大点击区：11px 小字难点准 */
+  :global(.tok, .fn, .mem, .var, .loc) {
+    display: inline-block;
+    padding: 1px 3px;
+    margin: -1px -1px;
+    border-radius: 3px;
+    cursor: pointer;
+  }
+  :global(.tok) { text-decoration: underline dotted; }
   :global(.tok:hover) { background: rgba(217, 119, 87, 0.12); }
-  :global(.fn) { color: #D97757; cursor: pointer; }
-  :global(.fn:hover) { background: rgba(217, 119, 87, 0.12); border-radius: 3px; }
-  :global(.mem) { color: #0D9488; cursor: pointer; }
-  :global(.mem:hover) { background: rgba(13, 148, 136, 0.12); border-radius: 3px; }
-  :global(.var) { color: #B45309; cursor: pointer; }
-  :global(.var:hover) { background: rgba(180, 83, 9, 0.12); border-radius: 3px; }
-  :global(.loc) { color: #4F46E5; cursor: pointer; }
-  :global(.loc:hover) { background: rgba(79, 70, 229, 0.12); border-radius: 3px; }
+  :global(.fn) { color: #D97757; }
+  :global(.fn:hover) { background: rgba(217, 119, 87, 0.12); }
+  :global(.mem) { color: #0D9488; }
+  :global(.mem:hover) { background: rgba(13, 148, 136, 0.12); }
+  :global(.var) { color: #B45309; }
+  :global(.var:hover) { background: rgba(180, 83, 9, 0.12); }
+  :global(.loc) { color: #4F46E5; }
+  :global(.loc:hover) { background: rgba(79, 70, 229, 0.12); }
   :global(.fndef) { font-weight: 600; }
   :global(.fndef.on) { background: #FFF3C4; border-radius: 3px; padding: 0 2px; }
 </style>
