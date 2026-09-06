@@ -615,6 +615,32 @@
     applyIndex(JSON.parse(text));
   }
 
+  // 打开项目文件夹：桌面版本地服务跑 index.exe（dev 模式无此服务则提示）
+  let projectPath = '';
+  let indexing = false;
+  async function indexProject() {
+    const dir = projectPath.trim();
+    if (!dir) { alert('请输入项目目录路径（可在资源管理器地址栏复制）'); return; }
+    indexing = true;
+    try {
+      const res = await fetch('http://localhost:5174/api/index', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dir }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => null);
+        alert('索引失败：' + (err?.error || res.status));
+        return;
+      }
+      applyIndex(await res.json());
+    } catch {
+      alert('无法连接本地索引服务（5174）。\n桌面版支持此功能；开发模式请先运行 index.exe 后用【导入索引】。');
+    } finally {
+      indexing = false;
+    }
+  }
+
   onMount(async () => {
     graph = new Graph({
       container,
@@ -741,6 +767,8 @@
   <div class="header">
     <span class="title">CodeViz</span>
     <span class="hint">类=方块（.h/.cpp 可切）· 成员变量/函数=弹出明细框 · 点击框置顶 · 拖动可重叠</span>
+    <input class="path" placeholder="项目目录路径（如 C:\myproject）" bind:value={projectPath} />
+    <button class="btn" onclick={indexProject} disabled={indexing}>{indexing ? '索引中…' : '打开项目'}</button>
     <button class="btn" onclick={() => fileInput.click()}>导入索引</button>
     <button class="reset" onclick={() => graph?.zoomTo(1)}>复位 100%</button>
     <input bind:this={fileInput} type="file" accept=".json" style="display:none"
@@ -806,6 +834,18 @@
     cursor: pointer;
   }
   .btn:hover, .reset:hover { background: #C15F3C; }
+  .btn:disabled { background: #C9C2B4; cursor: default; }
+  .path {
+    flex: 1;
+    max-width: 360px;
+    border: 1px solid #E8E6DC;
+    border-radius: 6px;
+    padding: 5px 10px;
+    font-size: 12px;
+    font-family: 'Consolas', monospace;
+    color: #1F1E1D;
+    background: #FAF9F5;
+  }
   .legend {
     display: flex;
     gap: 14px;

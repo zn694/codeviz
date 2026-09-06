@@ -2,7 +2,7 @@
 
 > 把代码库变成一张**可点击、可拖拽、可探索的图**：每个类是一块真实代码，每个符号都是跳转入口。基于 **libclang 真实语义索引**，不需要 LLM。
 
-![screenshot](docs/images/screenshot-main.png)
+![screenshot](docs/images/screenshot-main.jpg)
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Svelte](https://img.shields.io/badge/Svelte-5-FF3E00.svg)](https://svelte.dev)
@@ -25,7 +25,7 @@
 
 | 主界面 | 符号跳转 |
 |---|---|
-| ![screenshot](docs/images/screenshot-main.png) | （截图 2 占位，`Win+Shift+S` 截一张点开类的画面后替换） |
+| ![主界面](docs/images/screenshot-main.jpg) | ![符号跳转](docs/images/screenshot-jump.jpg) |
 
 ## 🏗 架构
 
