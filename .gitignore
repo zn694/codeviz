@@ -1,0 +1,10 @@
+# 依赖与构建产物
+node_modules/
+dist/
+build-tools/
+*.spec
+
+# 编辑器
+.vscode/
+.idea/
+*.log
