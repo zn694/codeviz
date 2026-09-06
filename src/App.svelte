@@ -227,13 +227,19 @@
       const c = ROLES[roleOf[owners[0]]?.role]?.color || '#6B7280';
       return `<span class="tok" style="color:${c}" data-targets="${owners.join(',')}" data-from="${id}">${m}</span>`;
     });
-    // ② 类头文件视图：成员变量 → 弹出明细框（空名防御：空交替会污染整个 HTML）
-    if (id.startsWith('cls:') && mode === 'h' && n.memberData?.length) {
-      const memNames = [...new Set(n.memberData.map((x) => x.name).filter(Boolean))];
+    // ② 成员变量 → 弹出明细框（类块 h/cpp 视图 + 方法明细框都生效）
+    const memberData = id.startsWith('cls:')
+      ? n.memberData
+      : id.startsWith('mtd:')
+        ? nodesById[id.slice(4).split('#')[0]]?.memberData
+        : null;
+    const memberClsId = id.startsWith('cls:') ? id : id.slice(4).split('#')[0];
+    if (memberData?.length) {
+      const memNames = [...new Set(memberData.map((x) => x.name).filter(Boolean))];
       if (memNames.length) {
         const memPattern = new RegExp(`\\b(${memNames.map(escRe).join('|')})\\b`, 'g');
         html = html.replace(memPattern, (m) =>
-          `<span class="mem" data-member="${id}" data-member-name="${m}">${m}</span>`);
+          `<span class="mem" data-member="${memberClsId}" data-member-name="${m}">${m}</span>`);
       }
     }
     // ③ 全局/文件级变量 → 点击弹声明框
@@ -358,7 +364,7 @@
         return {
           ...n,
           data: { html: codeHtml(n.id) },
-          style: { x: p.x, y: p.y, size: [s.width, s.height], z: zMap[n.id] || 1 },
+          style: { x: p.x, y: p.y, size: [s.width, s.height], zIndex: zMap[n.id] || 1 },
         };
       }),
       edges: [],
